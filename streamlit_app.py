@@ -98,14 +98,6 @@ def format_number(value, decimals=2):
     return f"{value:,.{decimals}f}".replace(",", " ")
 
 
-def save_interval_selection(resolution):
-    """Pastreaza selectia sliderului separat pentru fiecare rezolutie."""
-    widget_key = f"intervale_{resolution}"
-    st.session_state["intervale_by_resolution"][resolution] = (
-        st.session_state[widget_key]
-    )
-
-
 st.title("Dashboard prețuri OPCOM")
 st.caption("Analiză și filtrare pentru rapoartele Pieței pentru Ziua Următoare")
 
@@ -190,24 +182,20 @@ if minutes_per_interval is None:
 
 minimum_interval = 1
 maximum_interval = 24 * 60 // minutes_per_interval
-if "intervale_by_resolution" not in st.session_state:
-    st.session_state["intervale_by_resolution"] = {}
-
-default_intervals = st.session_state["intervale_by_resolution"].get(
-    selected_resolution,
-    (minimum_interval, maximum_interval),
+interval_options = list(range(minimum_interval, maximum_interval + 1))
+selected_interval = st.sidebar.selectbox(
+    "Interval",
+    options=interval_options,
+    format_func=lambda interval: (
+        f"Intervalul {interval} "
+        f"({((interval - 1) * minutes_per_interval) // 60:02d}:"
+        f"{((interval - 1) * minutes_per_interval) % 60:02d}–"
+        f"{(interval * minutes_per_interval) // 60:02d}:"
+        f"{(interval * minutes_per_interval) % 60:02d})"
+    ),
+    key=f"interval_{selected_resolution}",
+    help="Selectează intervalul dorit din listă.",
 )
-selected_intervals = st.sidebar.slider(
-    "Intervale",
-    min_value=minimum_interval,
-    max_value=maximum_interval,
-    value=default_intervals,
-    key=f"intervale_{selected_resolution}",
-    on_change=save_interval_selection,
-    args=(selected_resolution,),
-    help="Selectează intervalul de început și intervalul de sfârșit.",
-)
-start_interval, end_interval = selected_intervals
 st.sidebar.caption(
     f"{maximum_interval} intervale pe zi · "
     f"câte {minutes_per_interval} minute"
@@ -223,7 +211,7 @@ else:
 period_data = dataframe[
     dataframe["Data"].dt.date.between(start_date, end_date)
     & (dataframe["Rezolutie"] == selected_resolution)
-    & dataframe["Interval"].between(start_interval, end_interval)
+    & (dataframe["Interval"] == selected_interval)
 ]
 
 if period_data.empty:
