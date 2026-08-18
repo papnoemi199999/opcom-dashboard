@@ -8,6 +8,11 @@ import streamlit as st
 
 PRICE_COLUMN = "Pret mediu [lei/MWh]"
 REQUIRED_COLUMNS = {"Interval", PRICE_COLUMN, "Rezolutie"}
+RESOLUTION_MINUTES = {
+    "PT15M": 15,
+    "PT30M": 30,
+    "PT60M": 60,
+}
 
 
 st.set_page_config(
@@ -93,6 +98,14 @@ def format_number(value, decimals=2):
     return f"{value:,.{decimals}f}".replace(",", " ")
 
 
+def save_interval_selection(resolution):
+    """Pastreaza selectia sliderului separat pentru fiecare rezolutie."""
+    widget_key = f"intervale_{resolution}"
+    st.session_state["intervale_by_resolution"][resolution] = (
+        st.session_state[widget_key]
+    )
+
+
 st.title("Dashboard prețuri OPCOM")
 st.caption("Analiză și filtrare pentru rapoartele Pieței pentru Ziua Următoare")
 
@@ -168,6 +181,38 @@ selected_resolution = st.sidebar.selectbox(
     ),
 )
 
+minutes_per_interval = RESOLUTION_MINUTES.get(selected_resolution)
+if minutes_per_interval is None:
+    resolution_match = re.fullmatch(r"PT(\d+)M", selected_resolution)
+    minutes_per_interval = (
+        int(resolution_match.group(1)) if resolution_match else 60
+    )
+
+minimum_interval = 1
+maximum_interval = 24 * 60 // minutes_per_interval
+if "intervale_by_resolution" not in st.session_state:
+    st.session_state["intervale_by_resolution"] = {}
+
+default_intervals = st.session_state["intervale_by_resolution"].get(
+    selected_resolution,
+    (minimum_interval, maximum_interval),
+)
+selected_intervals = st.sidebar.slider(
+    "Intervale",
+    min_value=minimum_interval,
+    max_value=maximum_interval,
+    value=default_intervals,
+    key=f"intervale_{selected_resolution}",
+    on_change=save_interval_selection,
+    args=(selected_resolution,),
+    help="Selectează intervalul de început și intervalul de sfârșit.",
+)
+start_interval, end_interval = selected_intervals
+st.sidebar.caption(
+    f"{maximum_interval} intervale pe zi · "
+    f"câte {minutes_per_interval} minute"
+)
+
 if isinstance(selected_dates, (tuple, list)) and len(selected_dates) == 2:
     start_date, end_date = selected_dates
 elif isinstance(selected_dates, (tuple, list)):
@@ -178,6 +223,7 @@ else:
 period_data = dataframe[
     dataframe["Data"].dt.date.between(start_date, end_date)
     & (dataframe["Rezolutie"] == selected_resolution)
+    & dataframe["Interval"].between(start_interval, end_interval)
 ]
 
 if period_data.empty:
@@ -190,8 +236,6 @@ single_day = period_data["Data"].dt.date.nunique() == 1
 
 if single_day:
     displayed_data = period_data[["Data", "Interval", PRICE_COLUMN]].copy()
-    resolution_match = re.fullmatch(r"PT(\d+)M", selected_resolution)
-    minutes_per_interval = int(resolution_match.group(1)) if resolution_match else 60
     displayed_data["Ora"] = displayed_data["Interval"].map(
         lambda interval: (
             f"{((interval - 1) * minutes_per_interval) // 60:02d}:"
