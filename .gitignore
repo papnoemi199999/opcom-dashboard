@@ -9,9 +9,6 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Date generate de scraper
-opcom_*.csv
-opcom_*.tmp.csv
 
 # Streamlit
 .streamlit/secrets.toml

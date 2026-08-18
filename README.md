@@ -58,3 +58,7 @@ streamlit run streamlit_app.py
 Aplicația este disponibilă implicit la [http://localhost:8501](http://localhost:8501).
 
 Fișierele CSV generate sunt ignorate de Git. Ele pot fi regenerate oricând prin rularea scraperului.
+
+Pentru zilele de livrare anterioare datei de 1 octombrie 2025, PZU a avut
+granularitate orară. Scraperul salvează pentru acea perioadă numai rapoartele
+PT60M; nu etichetează artificial datele orare drept PT15M sau PT30M.
