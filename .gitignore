@@ -1,0 +1,22 @@
+# Medii virtuale
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Date generate de scraper
+opcom_*.csv
+opcom_*.tmp.csv
+
+# Streamlit
+.streamlit/secrets.toml
+
+# Editoare si sistem de operare
+.vscode/
+.idea/
+.DS_Store
