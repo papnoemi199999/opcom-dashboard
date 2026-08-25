@@ -2,6 +2,7 @@ import argparse
 import csv
 import io
 import re
+import shutil
 import time
 from datetime import date, datetime, time as datetime_time, timedelta, timezone
 from pathlib import Path
@@ -56,16 +57,9 @@ def available_resolutions(report_date):
     return SUPPORTED_RESOLUTIONS
 
 
-def iter_dates(year):
-    """Returneaza zilele disponibile din anul cerut."""
-    today = date.today()
-
-    if year > today.year:
-        raise ValueError("Nu se pot descarca rapoarte pentru un an viitor.")
-
-    current_date = date(year, 1, 1)
-    end_date = min(date(year, 12, 31), today)
-
+def iter_dates(start_date, end_date):
+    """Returneaza zilele dintre limitele primite, inclusiv."""
+    current_date = start_date
     while current_date <= end_date:
         yield current_date
         current_date += timedelta(days=1)
@@ -199,33 +193,63 @@ def download_day(session, report_date, resolution=60):
     return parse_opcom_csv(content, resolution, report_date)
 
 
-def download_year(year, resolutions=(15, 30, 60), delay=0.2):
+def latest_saved_date(filename):
+    """Returneaza ultima data din fisierul anual existent."""
+    if not filename.exists():
+        return None
+
+    with open(filename, newline="", encoding="utf-8-sig") as input_file:
+        dates = [
+            date.fromisoformat(row["Data"])
+            for row in csv.DictReader(input_file)
+        ]
+    return max(dates, default=None)
+
+
+def download_year(
+    year,
+    resolutions=(15, 30, 60),
+    delay=0.2,
+    end_date=None,
+):
     """
     Descarca rapoartele zilnice pentru rezolutiile cerute intr-un singur CSV.
 
-    In mod implicit sunt descarcate rezolutiile de 15, 30 si 60 de minute.
+    Daca fisierul exista, sunt descarcate numai zilele de dupa ultima data.
     """
+    if end_date is None:
+        today = datetime.now(MARKET_TIMEZONE).date()
+        end_date = today + timedelta(days=1)
+    if year > end_date.year:
+        raise ValueError("Nu se pot descarca rapoarte pentru un an viitor.")
+
     DATA_DIRECTORY.mkdir(exist_ok=True)
     output_filename = DATA_DIRECTORY / f"opcom_{year}_full.csv"
     temporary_filename = DATA_DIRECTORY / f"opcom_{year}_full.tmp.csv"
     fieldnames = ["Data", "Interval", "Pret mediu [lei/MWh]", "Rezolutie"]
+    last_date = latest_saved_date(output_filename)
+    start_date = (
+        last_date + timedelta(days=1) if last_date else date(year, 1, 1)
+    )
+    end_date = min(end_date, date(year, 12, 31))
+
+    if start_date > end_date:
+        print(f"Fisier deja actualizat: {output_filename}")
+        return output_filename
+
     downloaded_reports = 0
     unavailable_reports = 0
     skipped_reports = 0
+    new_rows = []
     resolutions = tuple(dict.fromkeys(resolutions))
     invalid_resolutions = set(resolutions).difference(SUPPORTED_RESOLUTIONS)
     if invalid_resolutions:
         values = ", ".join(str(value) for value in sorted(invalid_resolutions))
         raise ValueError(f"Rezolutii nesuportate: {values}")
 
-    with requests.Session() as session, open(
-        temporary_filename, "w", newline="", encoding="utf-8-sig"
-    ) as output_file:
+    with requests.Session() as session:
         session.headers.update(HEADERS)
-        writer = csv.DictWriter(output_file, fieldnames=fieldnames)
-        writer.writeheader()
-
-        for report_date in iter_dates(year):
+        for report_date in iter_dates(start_date, end_date):
             for resolution in resolutions:
                 if resolution not in available_resolutions(report_date):
                     unavailable_reports += 1
@@ -251,7 +275,7 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
                     )
                 else:
                     for row in rows:
-                        writer.writerow(
+                        new_rows.append(
                             {
                                 "Data": report_date.isoformat(),
                                 "Interval": row.get("Interval", ""),
@@ -279,9 +303,31 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
             "Fisierul existent nu a fost inlocuit."
         )
 
-    # Fisierul vechi ramane disponibil pentru dashboard pana cand noul fisier
-    # este complet, apoi este inlocuit printr-o singura operatie.
-    temporary_filename.replace(output_filename)
+    # Fisierul existent este copiat si completat numai dupa ce toate cererile
+    # noi au reusit, apoi este inlocuit printr-o singura operatie.
+    if output_filename.exists():
+        shutil.copyfile(output_filename, temporary_filename)
+        mode = "a"
+        encoding = "utf-8"
+    else:
+        mode = "w"
+        encoding = "utf-8-sig"
+
+    try:
+        with open(
+            temporary_filename,
+            mode,
+            newline="",
+            encoding=encoding,
+        ) as output_file:
+            writer = csv.DictWriter(output_file, fieldnames=fieldnames)
+            if mode == "w":
+                writer.writeheader()
+            writer.writerows(new_rows)
+        temporary_filename.replace(output_filename)
+    except Exception:
+        temporary_filename.unlink(missing_ok=True)
+        raise
 
     print(
         f"\nFisier creat: {output_filename} "
@@ -300,7 +346,7 @@ def parse_arguments():
         "year",
         type=int,
         nargs="?",
-        default=date.today().year,
+        default=None,
         help="anul descarcat (implicit: anul curent)",
     )
     parser.add_argument(
@@ -319,4 +365,8 @@ def parse_arguments():
 
 if __name__ == "__main__":
     args = parse_arguments()
-    download_year(args.year, args.resolution)
+    today = datetime.now(MARKET_TIMEZONE).date()
+    end_date = today + timedelta(days=1)
+    years = [args.year] if args.year else sorted({today.year, end_date.year})
+    for year in years:
+        download_year(year, args.resolution, end_date=end_date)

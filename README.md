@@ -49,6 +49,11 @@ Pentru anul curent, argumentul pentru an poate fi omis:
 python3 opcom_scrapper.py
 ```
 
+Dacă fișierul anual există deja, scraperul păstrează datele existente și
+descarcă numai zilele noi, inclusiv datele publicate pentru ziua următoare. Pe
+31 decembrie, rularea fără argument creează și fișierul anului următor pentru
+datele din 1 ianuarie.
+
 ## Pornirea dashboardului
 
 ```bash
@@ -63,7 +68,7 @@ Aplicația este disponibilă implicit la [http://localhost:8501](http://localhos
 - `app/` — încărcarea datelor și componentele interfeței;
 - `data/` — fișierele CSV anuale generate de scraper.
 
-Fișierele CSV pot fi regenerate oricând prin rularea scraperului.
+Fișierele CSV pot fi actualizate oricând prin rularea scraperului.
 
 Pentru zilele de livrare anterioare datei de 1 octombrie 2025, PZU a avut
 granularitate orară. Scraperul salvează pentru acea perioadă numai rapoartele
