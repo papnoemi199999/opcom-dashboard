@@ -98,6 +98,12 @@ def format_number(value, decimals=2):
     return f"{value:,.{decimals}f}".replace(",", " ")
 
 
+def interval_start_time(interval, minutes_per_interval):
+    """Formateaza ora de inceput a unui interval ca HH:MM."""
+    total_minutes = (interval - 1) * minutes_per_interval
+    return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
 st.title("Dashboard prețuri PZU RO")
 st.caption("Analiză și filtrare pentru rapoartele Pieței pentru Ziua Următoare")
 
@@ -204,13 +210,7 @@ if deselect_all_column.button(
 selected_intervals = st.sidebar.multiselect(
     "Interval",
     options=interval_options,
-    format_func=lambda interval: (
-        f"Intervalul {interval} "
-        f"({((interval - 1) * minutes_per_interval) // 60:02d}:"
-        f"{((interval - 1) * minutes_per_interval) % 60:02d}–"
-        f"{(interval * minutes_per_interval) // 60:02d}:"
-        f"{(interval * minutes_per_interval) % 60:02d})"
-    ),
+    format_func=lambda interval: f"I{interval}",
     key=interval_state_key,
     help="Selectează unul sau mai multe intervale din listă.",
 )
@@ -250,9 +250,12 @@ single_day = period_data["Data"].dt.date.nunique() == 1
 if single_day:
     displayed_data = period_data[["Data", "Interval", PRICE_COLUMN]].copy()
     displayed_data["Ora"] = displayed_data["Interval"].map(
+        lambda interval: interval_start_time(interval, minutes_per_interval)
+    )
+    displayed_data["Interval orar"] = displayed_data["Interval"].map(
         lambda interval: (
-            f"{((interval - 1) * minutes_per_interval) // 60:02d}:"
-            f"{((interval - 1) * minutes_per_interval) % 60:02d}"
+            f"{interval_start_time(interval, minutes_per_interval)}–"
+            f"{interval_start_time(interval + 1, minutes_per_interval)}"
         )
     )
 else:
@@ -305,7 +308,9 @@ with st.expander("Vezi datele din grafic"):
     table_data = displayed_data.copy()
     table_data["Data"] = table_data["Data"].dt.strftime("%Y-%m-%d")
     if single_day:
-        table_data = table_data[["Data", "Ora", PRICE_COLUMN]]
+        table_data = table_data[
+            ["Data", "Interval", "Interval orar", PRICE_COLUMN]
+        ]
     st.dataframe(
         table_data,
         use_container_width=True,
