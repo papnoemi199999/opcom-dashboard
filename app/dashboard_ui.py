@@ -5,7 +5,12 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-from app.data_service import PRICE_COLUMN, minutes_for_resolution
+from app.data_service import (
+    PRICE_COLUMN,
+    latest_day_data,
+    minutes_for_resolution,
+    prepare_display_data,
+)
 
 
 @dataclass(frozen=True)
@@ -45,6 +50,77 @@ def render_invalid_rows_warning(dataframe):
     st.warning(
         "Unele rânduri invalide au fost ignorate "
         f"({invalid_details}). Regenerează fișierul cu scraperul actualizat."
+    )
+
+
+def format_resolution_label(value):
+    return value.replace("PT", "").replace("M", " minute")
+
+
+def render_latest_day_chart(dataframe):
+    day_dataframe = latest_day_data(dataframe)
+    latest_date = day_dataframe["Data"].max()
+    available_resolutions = sorted(
+        day_dataframe["Rezolutie"].unique().tolist()
+    )
+    preferred_resolution = next(
+        (
+            resolution
+            for resolution in ("PT15M", "PT60M", "PT30M")
+            if resolution in available_resolutions
+        ),
+        available_resolutions[0],
+    )
+
+    title_column, resolution_column = st.columns(
+        [4, 1],
+        vertical_alignment="bottom",
+    )
+    title_column.subheader("Ultima zi din baza de date")
+    title_column.caption(latest_date.strftime("%d.%m.%Y"))
+    selected_resolution = resolution_column.selectbox(
+        "Rezoluție",
+        options=available_resolutions,
+        format_func=format_resolution_label,
+        index=available_resolutions.index(preferred_resolution),
+        key="latest_day_resolution",
+    )
+
+    resolution_data = day_dataframe[
+        day_dataframe["Rezolutie"] == selected_resolution
+    ]
+    minutes_per_interval = minutes_for_resolution(selected_resolution)
+    displayed_data, _ = prepare_display_data(
+        resolution_data,
+        minutes_per_interval,
+    )
+
+    metric_1, metric_2, metric_3 = st.columns(3)
+    metric_1.metric(
+        "Preț mediu",
+        f"{format_number(displayed_data[PRICE_COLUMN].mean())} lei/MWh",
+    )
+    metric_2.metric(
+        "Preț minim",
+        f"{format_number(displayed_data[PRICE_COLUMN].min())} lei/MWh",
+    )
+    metric_3.metric(
+        "Preț maxim",
+        f"{format_number(displayed_data[PRICE_COLUMN].max())} lei/MWh",
+    )
+
+    chart = px.line(
+        displayed_data,
+        x="Ora",
+        y=PRICE_COLUMN,
+        markers=True,
+        labels={PRICE_COLUMN: "Preț [lei/MWh]", "Ora": "Ora"},
+    )
+    chart.update_layout(hovermode="x unified")
+    st.plotly_chart(
+        chart,
+        use_container_width=True,
+        key="latest_day_chart",
     )
 
 
@@ -101,14 +177,13 @@ def render_chart_filters(dataframe):
     selected_resolution = resolution_column.selectbox(
         "Rezoluție",
         options=available_resolutions,
-        format_func=lambda value: value.replace("PT", "").replace(
-            "M", " minute"
-        ),
+        format_func=format_resolution_label,
         index=(
             available_resolutions.index("PT60M")
             if "PT60M" in available_resolutions
             else 0
         ),
+        key="main_chart_resolution",
     )
 
     minutes_per_interval = minutes_for_resolution(selected_resolution)

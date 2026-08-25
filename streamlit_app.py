@@ -8,6 +8,7 @@ from app.dashboard_ui import (
     render_header,
     render_invalid_rows_warning,
     render_chart_filters,
+    render_latest_day_chart,
 )
 from app.data_service import (
     filter_data,
@@ -48,6 +49,8 @@ if dataframe.empty:
     st.stop()
 
 render_invalid_rows_warning(dataframe)
+render_latest_day_chart(dataframe)
+st.divider()
 filters = render_chart_filters(dataframe)
 
 if not filters.intervals:

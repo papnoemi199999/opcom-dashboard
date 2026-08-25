@@ -129,6 +129,12 @@ def filter_data(
     ]
 
 
+def latest_day_data(dataframe):
+    """Intoarce toate randurile pentru cea mai recenta zi disponibila."""
+    latest_date = dataframe["Data"].max().date()
+    return dataframe[dataframe["Data"].dt.date == latest_date]
+
+
 def interval_start_time(interval, minutes_per_interval):
     """Formateaza ora de inceput a unui interval ca HH:MM."""
     total_minutes = (interval - 1) * minutes_per_interval
