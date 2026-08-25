@@ -183,7 +183,25 @@ if minutes_per_interval is None:
 minimum_interval = 1
 maximum_interval = 24 * 60 // minutes_per_interval
 interval_options = list(range(minimum_interval, maximum_interval + 1))
-selected_interval = st.sidebar.selectbox(
+interval_state_key = f"intervale_{selected_resolution}"
+if interval_state_key not in st.session_state:
+    st.session_state[interval_state_key] = interval_options.copy()
+
+select_all_column, deselect_all_column = st.sidebar.columns(2)
+if select_all_column.button(
+    "Selectează tot",
+    key=f"selecteaza_tot_{selected_resolution}",
+    use_container_width=True,
+):
+    st.session_state[interval_state_key] = interval_options.copy()
+if deselect_all_column.button(
+    "Deselectează tot",
+    key=f"deselecteaza_tot_{selected_resolution}",
+    use_container_width=True,
+):
+    st.session_state[interval_state_key] = []
+
+selected_intervals = st.sidebar.multiselect(
     "Interval",
     options=interval_options,
     format_func=lambda interval: (
@@ -193,8 +211,8 @@ selected_interval = st.sidebar.selectbox(
         f"{(interval * minutes_per_interval) // 60:02d}:"
         f"{(interval * minutes_per_interval) % 60:02d})"
     ),
-    key=f"interval_{selected_resolution}",
-    help="Selectează intervalul dorit din listă.",
+    key=interval_state_key,
+    help="Selectează unul sau mai multe intervale din listă.",
 )
 st.sidebar.caption(
     f"{maximum_interval} intervale pe zi · "
@@ -208,10 +226,17 @@ elif isinstance(selected_dates, (tuple, list)):
 else:
     start_date = end_date = selected_dates
 
+if not selected_intervals:
+    st.info(
+        "Nu este selectat niciun interval. "
+        "Selectează cel puțin unul pentru a afișa graficul."
+    )
+    st.stop()
+
 period_data = dataframe[
     dataframe["Data"].dt.date.between(start_date, end_date)
     & (dataframe["Rezolutie"] == selected_resolution)
-    & (dataframe["Interval"] == selected_interval)
+    & dataframe["Interval"].isin(selected_intervals)
 ]
 
 if period_data.empty:
