@@ -76,8 +76,9 @@ def render_sidebar_notes():
         st.markdown(
             """
             Începând cu **1 octombrie 2025**, PZU a trecut de la intervale orare
-            la intervale de **15 minute**, oferind 96 de intervale de tranzacționare
-            pentru fiecare zi.
+            la intervale de **15 minute**, oferind de regulă 96 de intervale de
+            tranzacționare. În zilele cu schimbarea orei sunt 92 sau 100 de
+            intervale.
 
             Pentru perioadele anterioare acestei date sunt disponibile datele
             orare, cu 24 de intervale pe zi. De aceea, anumite rezoluții nu au date
@@ -184,26 +185,55 @@ def interval_selection_label(selected_count, total_count):
     return f"Intervale: {selected_count}/{total_count}"
 
 
+def available_interval_options(
+    dataframe,
+    resolution,
+    start_date,
+    end_date,
+):
+    """Returneaza intervalele existente in perioada si rezolutia selectate."""
+    return sorted(
+        dataframe.loc[
+            (dataframe["Rezolutie"] == resolution)
+            & dataframe["Data"].dt.date.between(start_date, end_date),
+            "Interval",
+        ]
+        .unique()
+        .tolist()
+    )
+
+
 def render_interval_selector(
     container,
     resolution,
     state_key,
+    interval_options,
     label="Intervale",
 ):
     minutes_per_interval = minutes_for_resolution(resolution)
-    maximum_interval = 24 * 60 // minutes_per_interval
-    interval_options = list(range(1, maximum_interval + 1))
-    if state_key not in st.session_state:
+    options_state_key = f"{state_key}_available_options"
+    previous_options = st.session_state.get(options_state_key)
+    if state_key not in st.session_state or previous_options is None:
         st.session_state[state_key] = interval_options.copy()
+    elif st.session_state[state_key] == previous_options:
+        st.session_state[state_key] = interval_options.copy()
+    else:
+        st.session_state[state_key] = [
+            interval
+            for interval in st.session_state[state_key]
+            if interval in interval_options
+        ]
+    st.session_state[options_state_key] = interval_options.copy()
 
     selected_count = len(st.session_state[state_key])
+    total_count = len(interval_options)
     popover_label = interval_selection_label(
         selected_count,
-        maximum_interval,
+        total_count,
     )
     with container.popover(popover_label, use_container_width=True):
         st.caption(
-            f"{maximum_interval} intervale pe zi · "
+            f"{total_count} intervale disponibile · "
             f"câte {minutes_per_interval} minute"
         )
         select_all_column, deselect_all_column = st.columns(2)
@@ -264,6 +294,7 @@ def render_chart_filters(dataframe):
         max_value=maximum_date,
         key=f"perioada_{selected_year}",
     )
+    start_date, end_date = normalize_date_range(selected_dates)
 
     available_resolutions = sorted(
         year_dataframe["Rezolutie"].unique().tolist()
@@ -281,15 +312,21 @@ def render_chart_filters(dataframe):
     )
 
     minutes_per_interval = minutes_for_resolution(selected_resolution)
+    interval_options = available_interval_options(
+        year_dataframe,
+        selected_resolution,
+        start_date,
+        end_date,
+    )
     interval_state_key = f"intervale_{selected_resolution}"
     selected_intervals = render_interval_selector(
         interval_column,
         selected_resolution,
         interval_state_key,
+        interval_options,
         label="Intervale selectate",
     )
 
-    start_date, end_date = normalize_date_range(selected_dates)
     return FilterSelection(
         dataframe=year_dataframe,
         start_date=start_date,
@@ -377,9 +414,6 @@ def render_comparison_chart(dataframe):
     )
 
     available_years = sorted(dataframe["Data"].dt.year.unique().tolist())
-    maximum_interval = 24 * 60 // minutes_for_resolution(
-        selected_resolution
-    )
     series_columns = st.columns(series_count, gap="medium")
     series_settings = []
 
@@ -436,14 +470,21 @@ def render_comparison_chart(dataframe):
         interval_state_key = (
             f"comparison_intervals_{series_index}_{selected_resolution}"
         )
+        interval_options = available_interval_options(
+            dataframe,
+            selected_resolution,
+            start_date,
+            end_date,
+        )
         selected_intervals = render_interval_selector(
             series_column,
             selected_resolution,
             interval_state_key,
+            interval_options,
         )
         interval_text = comparison_interval_text(
             selected_intervals,
-            maximum_interval,
+            len(interval_options),
         )
         series_settings.append(
             (

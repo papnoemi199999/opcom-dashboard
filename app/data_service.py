@@ -174,9 +174,23 @@ def latest_day_data(dataframe):
 
 
 def interval_start_time(interval, minutes_per_interval):
-    """Formateaza ora de inceput a unui interval ca HH:MM."""
+    """Formateaza inceputul intervalului sau pastreaza identificatorul extra."""
     total_minutes = (interval - 1) * minutes_per_interval
+    if total_minutes >= 24 * 60:
+        return f"I{interval}"
     return f"{total_minutes // 60:02d}:{total_minutes % 60:02d}"
+
+
+def interval_time_range(interval, minutes_per_interval):
+    """Formateaza intervalul, fara ore artificiale peste limita de 24:00."""
+    start_minutes = (interval - 1) * minutes_per_interval
+    if start_minutes >= 24 * 60:
+        return f"I{interval}"
+
+    end_minutes = interval * minutes_per_interval
+    start = f"{start_minutes // 60:02d}:{start_minutes % 60:02d}"
+    end = f"{end_minutes // 60:02d}:{end_minutes % 60:02d}"
+    return f"{start}–{end}"
 
 
 def prepare_display_data(period_data, minutes_per_interval):
@@ -201,9 +215,6 @@ def prepare_display_data(period_data, minutes_per_interval):
         lambda interval: interval_start_time(interval, minutes_per_interval)
     )
     displayed_data["Interval orar"] = displayed_data["Interval"].map(
-        lambda interval: (
-            f"{interval_start_time(interval, minutes_per_interval)}–"
-            f"{interval_start_time(interval + 1, minutes_per_interval)}"
-        )
+        lambda interval: interval_time_range(interval, minutes_per_interval)
     )
     return displayed_data, single_day
