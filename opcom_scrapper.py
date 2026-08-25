@@ -21,6 +21,7 @@ HEADERS = {
 SUPPORTED_RESOLUTIONS = (15, 30, 60)
 MARKET_TIMEZONE = ZoneInfo("Europe/Bucharest")
 QUARTER_HOURLY_START_DATE = date(2025, 10, 1)
+DATA_DIRECTORY = Path(__file__).parent / "data"
 
 
 class ResolutionMismatchError(ValueError):
@@ -204,8 +205,9 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
 
     In mod implicit sunt descarcate rezolutiile de 15, 30 si 60 de minute.
     """
-    output_filename = f"opcom_{year}_full.csv"
-    temporary_filename = f"opcom_{year}_full.tmp.csv"
+    DATA_DIRECTORY.mkdir(exist_ok=True)
+    output_filename = DATA_DIRECTORY / f"opcom_{year}_full.csv"
+    temporary_filename = DATA_DIRECTORY / f"opcom_{year}_full.tmp.csv"
     fieldnames = ["Data", "Interval", "Pret mediu [lei/MWh]", "Rezolutie"]
     downloaded_reports = 0
     unavailable_reports = 0
@@ -272,7 +274,7 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
 
     # Fisierul vechi ramane disponibil pentru dashboard pana cand noul fisier
     # este complet, apoi este inlocuit printr-o singura operatie.
-    Path(temporary_filename).replace(output_filename)
+    temporary_filename.replace(output_filename)
 
     print(
         f"\nFisier creat: {output_filename} "

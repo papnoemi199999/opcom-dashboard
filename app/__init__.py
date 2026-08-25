@@ -1,0 +1,1 @@
+"""Componentele dashboardului OPCOM."""

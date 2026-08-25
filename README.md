@@ -35,7 +35,7 @@ Pentru toate rezoluțiile din anul 2026:
 python3 opcom_scrapper.py 2026
 ```
 
-Rezultatul este salvat în `opcom_2026_full.csv`.
+Rezultatul este salvat în `data/opcom_2026_full.csv`.
 
 Pentru anumite rezoluții:
 
@@ -57,7 +57,13 @@ streamlit run streamlit_app.py
 
 Aplicația este disponibilă implicit la [http://localhost:8501](http://localhost:8501).
 
-Fișierele CSV generate sunt ignorate de Git. Ele pot fi regenerate oricând prin rularea scraperului.
+## Structura proiectului
+
+- `streamlit_app.py` — punctul de intrare al aplicației;
+- `app/` — încărcarea datelor și componentele interfeței;
+- `data/` — fișierele CSV anuale generate de scraper.
+
+Fișierele CSV pot fi regenerate oricând prin rularea scraperului.
 
 Pentru zilele de livrare anterioare datei de 1 octombrie 2025, PZU a avut
 granularitate orară. Scraperul salvează pentru acea perioadă numai rapoartele
