@@ -7,7 +7,7 @@ from app.dashboard_ui import (
     render_file_uploader,
     render_header,
     render_invalid_rows_warning,
-    render_sidebar_filters,
+    render_chart_filters,
 )
 from app.data_service import (
     filter_data,
@@ -33,7 +33,7 @@ try:
 except FileNotFoundError:
     st.info(
         "Nu am găsit niciun fișier `opcom_*.csv`. "
-        "Rulează scraperul sau încarcă un CSV din bara laterală."
+        "Rulează scraperul sau încarcă manual un CSV."
     )
     st.stop()
 except Exception as error:
@@ -48,7 +48,7 @@ if dataframe.empty:
     st.stop()
 
 render_invalid_rows_warning(dataframe)
-filters = render_sidebar_filters(dataframe)
+filters = render_chart_filters(dataframe)
 
 if not filters.intervals:
     st.info(

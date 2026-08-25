@@ -48,12 +48,33 @@ def render_invalid_rows_warning(dataframe):
     )
 
 
-def render_sidebar_filters(dataframe):
-    st.sidebar.header("Filtre")
+def set_interval_selection(state_key, intervals):
+    st.session_state[state_key] = intervals.copy()
+
+
+def interval_selection_label(selected_count, total_count):
+    if selected_count == total_count:
+        return f"Intervale: toate ({total_count})"
+    if selected_count == 0:
+        return "Intervale: niciunul"
+    return f"Intervale: {selected_count}/{total_count}"
+
+
+def render_chart_filters(dataframe):
+    (
+        year_column,
+        period_column,
+        resolution_column,
+        interval_column,
+    ) = st.columns(
+        [1, 2, 1.2, 1.6],
+        gap="small",
+        vertical_alignment="bottom",
+    )
 
     available_years = sorted(dataframe["Data"].dt.year.unique().tolist())
     year_options = ["Toți anii", *available_years]
-    selected_year = st.sidebar.selectbox(
+    selected_year = year_column.selectbox(
         "An",
         options=year_options,
         index=len(year_options) - 1,
@@ -66,7 +87,7 @@ def render_sidebar_filters(dataframe):
 
     minimum_date = year_dataframe["Data"].min().date()
     maximum_date = year_dataframe["Data"].max().date()
-    selected_dates = st.sidebar.date_input(
+    selected_dates = period_column.date_input(
         "Perioada",
         value=(minimum_date, maximum_date),
         min_value=minimum_date,
@@ -77,7 +98,7 @@ def render_sidebar_filters(dataframe):
     available_resolutions = sorted(
         year_dataframe["Rezolutie"].unique().tolist()
     )
-    selected_resolution = st.sidebar.selectbox(
+    selected_resolution = resolution_column.selectbox(
         "Rezoluție",
         options=available_resolutions,
         format_func=lambda value: value.replace("PT", "").replace(
@@ -97,31 +118,41 @@ def render_sidebar_filters(dataframe):
     if interval_state_key not in st.session_state:
         st.session_state[interval_state_key] = interval_options.copy()
 
-    select_all_column, deselect_all_column = st.sidebar.columns(2)
-    if select_all_column.button(
-        "Selectează tot",
-        key=f"selecteaza_tot_{selected_resolution}",
+    selected_count = len(st.session_state[interval_state_key])
+    popover_label = interval_selection_label(
+        selected_count,
+        maximum_interval,
+    )
+    with interval_column.popover(
+        popover_label,
         use_container_width=True,
     ):
-        st.session_state[interval_state_key] = interval_options.copy()
-    if deselect_all_column.button(
-        "Deselectează tot",
-        key=f"deselecteaza_tot_{selected_resolution}",
-        use_container_width=True,
-    ):
-        st.session_state[interval_state_key] = []
-
-    selected_intervals = st.sidebar.multiselect(
-        "Interval",
-        options=interval_options,
-        format_func=lambda interval: f"I{interval}",
-        key=interval_state_key,
-        help="Selectează unul sau mai multe intervale din listă.",
-    )
-    st.sidebar.caption(
-        f"{maximum_interval} intervale pe zi · "
-        f"câte {minutes_per_interval} minute"
-    )
+        st.caption(
+            f"{maximum_interval} intervale pe zi · "
+            f"câte {minutes_per_interval} minute"
+        )
+        select_all_column, deselect_all_column = st.columns(2)
+        select_all_column.button(
+            "Selectează tot",
+            key=f"selecteaza_tot_{selected_resolution}",
+            on_click=set_interval_selection,
+            args=(interval_state_key, interval_options),
+            use_container_width=True,
+        )
+        deselect_all_column.button(
+            "Deselectează tot",
+            key=f"deselecteaza_tot_{selected_resolution}",
+            on_click=set_interval_selection,
+            args=(interval_state_key, []),
+            use_container_width=True,
+        )
+        selected_intervals = st.multiselect(
+            "Intervale selectate",
+            options=interval_options,
+            format_func=lambda interval: f"I{interval}",
+            key=interval_state_key,
+            help="Selectează unul sau mai multe intervale din listă.",
+        )
 
     start_date, end_date = normalize_date_range(selected_dates)
     return FilterSelection(
