@@ -1,0 +1,40 @@
+name: Actualizare date OPCOM
+
+on:
+  schedule:
+    - cron: "0 15 * * *"
+      timezone: "Europe/Bucharest"
+  workflow_dispatch:
+
+permissions:
+  contents: write           # necesar ca job-ul să poată face commit în repo
+
+jobs:
+  update-data:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Descarcă codul din repo
+        uses: actions/checkout@v7
+
+      - name: Configurează Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Instalează dependențele
+        run: pip install requests
+
+      - name: Rulează scraperul pentru anul curent
+        run: python opcom_scrapper.py
+
+      - name: Salvează fișierul actualizat (dacă s-a schimbat)
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/opcom_*.csv
+          if git diff --cached --quiet; then
+            echo "Nicio schimbare în date - nu fac commit."
+          else
+            git commit -m "Actualizare automata date OPCOM ($(date -u +%F))"
+            git push
+          fi

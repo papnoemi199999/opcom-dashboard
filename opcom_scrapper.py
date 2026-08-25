@@ -238,9 +238,9 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
                 try:
                     rows = download_day(session, report_date, resolution)
                 except ResolutionMismatchError as error:
-                    unavailable_reports += 1
+                    skipped_reports += 1
                     print(
-                        f"[INDISPONIBIL] {report_date:%d/%m/%Y} "
+                        f"[EROARE] {report_date:%d/%m/%Y} "
                         f"PT{resolution}M: {error}"
                     )
                 except (requests.RequestException, UnicodeError, ValueError) as error:
@@ -271,6 +271,13 @@ def download_year(year, resolutions=(15, 30, 60), delay=0.2):
                     )
 
                 time.sleep(delay)
+
+    if skipped_reports:
+        temporary_filename.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"Descarcarea a esuat pentru {skipped_reports} rapoarte. "
+            "Fisierul existent nu a fost inlocuit."
+        )
 
     # Fisierul vechi ramane disponibil pentru dashboard pana cand noul fisier
     # este complet, apoi este inlocuit printr-o singura operatie.

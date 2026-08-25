@@ -68,3 +68,15 @@ Fișierele CSV pot fi regenerate oricând prin rularea scraperului.
 Pentru zilele de livrare anterioare datei de 1 octombrie 2025, PZU a avut
 granularitate orară. Scraperul salvează pentru acea perioadă numai rapoartele
 PT60M; nu etichetează artificial datele orare drept PT15M sau PT30M.
+
+## Actualizarea automată a datelor
+
+Workflow-ul GitHub Actions din `.github/workflows/update-opcom.yml` rulează
+scraperul zilnic la ora 15:00 în fusul orar `Europe/Bucharest`, inclusiv după
+schimbarea orei de vară/iarnă. Workflow-ul poate fi pornit și manual din pagina
+**Actions** a repository-ului.
+
+Dacă toate rapoartele sunt descărcate corect, workflow-ul face commit numai când
+fișierul `data/opcom_<an>_full.csv` s-a modificat. Dacă un raport nu poate fi
+descărcat sau validat, scraperul păstrează fișierul existent, iar rularea eșuează
+în loc să publice un CSV incomplet.
