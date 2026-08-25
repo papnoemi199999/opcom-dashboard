@@ -7,6 +7,7 @@ from app.dashboard_ui import (
     render_file_uploader,
     render_header,
     render_invalid_rows_warning,
+    render_sidebar_notes,
     render_chart_filters,
     render_comparison_chart,
     render_latest_day_chart,
@@ -26,6 +27,7 @@ st.set_page_config(
 
 render_header()
 uploaded_file = render_file_uploader()
+render_sidebar_notes()
 
 try:
     dataframe, source_name = load_available_data(

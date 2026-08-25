@@ -56,6 +56,36 @@ def render_file_uploader():
     )
 
 
+def render_sidebar_notes():
+    with st.sidebar.expander("Despre aplicație"):
+        st.markdown(
+            """
+            Dashboardul permite explorarea prețurilor din **Piața pentru Ziua
+            Următoare (PZU)** prin trei grafice:
+
+            - **Ultima zi** - evoluția prețului în cea mai recentă zi disponibilă;
+            - **Comparație** - suprapunerea mai multor luni sau perioade;
+            - **Graficul principal** - analiza unei perioade și a unor intervale
+              selectate.
+
+            Datele provin din rapoartele PZU publicate pe **opcom.ro**.
+            """
+        )
+
+    with st.sidebar.expander("Trecerea la intervale de 15 minute"):
+        st.markdown(
+            """
+            Începând cu **1 octombrie 2025**, PZU a trecut de la intervale orare
+            la intervale de **15 minute**, oferind 96 de intervale de tranzacționare
+            pentru fiecare zi.
+
+            Pentru perioadele anterioare acestei date sunt disponibile datele
+            orare, cu 24 de intervale pe zi. De aceea, anumite rezoluții nu au date
+            pentru toate perioadele selectabile.
+            """
+        )
+
+
 def render_invalid_rows_warning(dataframe):
     invalid_by_resolution = dataframe.attrs.get("invalid_by_resolution", {})
     if not invalid_by_resolution:
