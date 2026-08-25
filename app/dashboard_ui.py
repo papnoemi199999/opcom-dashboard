@@ -1,5 +1,6 @@
+from calendar import monthrange
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, timedelta
 
 import pandas as pd
 import plotly.express as px
@@ -9,8 +10,25 @@ from app.data_service import (
     PRICE_COLUMN,
     latest_day_data,
     minutes_for_resolution,
+    prepare_comparison_series,
     prepare_display_data,
 )
+
+
+ROMANIAN_MONTHS = [
+    "Ianuarie",
+    "Februarie",
+    "Martie",
+    "Aprilie",
+    "Mai",
+    "Iunie",
+    "Iulie",
+    "August",
+    "Septembrie",
+    "Octombrie",
+    "Noiembrie",
+    "Decembrie",
+]
 
 
 @dataclass(frozen=True)
@@ -136,6 +154,52 @@ def interval_selection_label(selected_count, total_count):
     return f"Intervale: {selected_count}/{total_count}"
 
 
+def render_interval_selector(
+    container,
+    resolution,
+    state_key,
+    label="Intervale",
+):
+    minutes_per_interval = minutes_for_resolution(resolution)
+    maximum_interval = 24 * 60 // minutes_per_interval
+    interval_options = list(range(1, maximum_interval + 1))
+    if state_key not in st.session_state:
+        st.session_state[state_key] = interval_options.copy()
+
+    selected_count = len(st.session_state[state_key])
+    popover_label = interval_selection_label(
+        selected_count,
+        maximum_interval,
+    )
+    with container.popover(popover_label, use_container_width=True):
+        st.caption(
+            f"{maximum_interval} intervale pe zi · "
+            f"câte {minutes_per_interval} minute"
+        )
+        select_all_column, deselect_all_column = st.columns(2)
+        select_all_column.button(
+            "Selectează tot",
+            key=f"selecteaza_tot_{state_key}",
+            on_click=set_interval_selection,
+            args=(state_key, interval_options),
+            use_container_width=True,
+        )
+        deselect_all_column.button(
+            "Deselectează tot",
+            key=f"deselecteaza_tot_{state_key}",
+            on_click=set_interval_selection,
+            args=(state_key, []),
+            use_container_width=True,
+        )
+        return st.multiselect(
+            label,
+            options=interval_options,
+            format_func=lambda interval: f"I{interval}",
+            key=state_key,
+            help="Selectează unul sau mai multe intervale din listă.",
+        )
+
+
 def render_chart_filters(dataframe):
     (
         year_column,
@@ -187,47 +251,13 @@ def render_chart_filters(dataframe):
     )
 
     minutes_per_interval = minutes_for_resolution(selected_resolution)
-    maximum_interval = 24 * 60 // minutes_per_interval
-    interval_options = list(range(1, maximum_interval + 1))
     interval_state_key = f"intervale_{selected_resolution}"
-    if interval_state_key not in st.session_state:
-        st.session_state[interval_state_key] = interval_options.copy()
-
-    selected_count = len(st.session_state[interval_state_key])
-    popover_label = interval_selection_label(
-        selected_count,
-        maximum_interval,
+    selected_intervals = render_interval_selector(
+        interval_column,
+        selected_resolution,
+        interval_state_key,
+        label="Intervale selectate",
     )
-    with interval_column.popover(
-        popover_label,
-        use_container_width=True,
-    ):
-        st.caption(
-            f"{maximum_interval} intervale pe zi · "
-            f"câte {minutes_per_interval} minute"
-        )
-        select_all_column, deselect_all_column = st.columns(2)
-        select_all_column.button(
-            "Selectează tot",
-            key=f"selecteaza_tot_{selected_resolution}",
-            on_click=set_interval_selection,
-            args=(interval_state_key, interval_options),
-            use_container_width=True,
-        )
-        deselect_all_column.button(
-            "Deselectează tot",
-            key=f"deselecteaza_tot_{selected_resolution}",
-            on_click=set_interval_selection,
-            args=(interval_state_key, []),
-            use_container_width=True,
-        )
-        selected_intervals = st.multiselect(
-            "Intervale selectate",
-            options=interval_options,
-            format_func=lambda interval: f"I{interval}",
-            key=interval_state_key,
-            help="Selectează unul sau mai multe intervale din listă.",
-        )
 
     start_date, end_date = normalize_date_range(selected_dates)
     return FilterSelection(
@@ -246,6 +276,231 @@ def normalize_date_range(selected_dates):
     if isinstance(selected_dates, (tuple, list)):
         return selected_dates[0], selected_dates[0]
     return selected_dates, selected_dates
+
+
+def comparison_interval_text(intervals, maximum_interval):
+    if not intervals:
+        return "niciun interval"
+    if len(intervals) == maximum_interval:
+        return "toate intervalele"
+    if len(intervals) <= 3:
+        return ", ".join(f"I{interval}" for interval in intervals)
+    return f"{len(intervals)} intervale"
+
+
+def unique_series_label(label, used_labels):
+    occurrence = used_labels.get(label, 0) + 1
+    used_labels[label] = occurrence
+    return label if occurrence == 1 else f"{label} ({occurrence})"
+
+
+def default_comparison_period(dataframe, series_index):
+    minimum_date = dataframe["Data"].min().date()
+    maximum_date = dataframe["Data"].max().date()
+    preferred_year = 2025 + series_index
+    preferred_start = date(preferred_year, 1, 1)
+    preferred_end = date(preferred_year, 1, 31)
+    if minimum_date <= preferred_start <= maximum_date:
+        return preferred_start, min(preferred_end, maximum_date)
+
+    if series_index == 0:
+        start_date = minimum_date
+        return start_date, min(start_date + timedelta(days=30), maximum_date)
+
+    end_date = maximum_date
+    return max(minimum_date, end_date - timedelta(days=30)), end_date
+
+
+def render_comparison_chart(dataframe):
+    st.subheader("Comparație")
+    st.caption(
+        "Compară mediile zilnice ale mai multor luni sau perioade pe aceeași "
+        "axă. Fiecare serie poate folosi propriile intervale orare."
+    )
+
+    mode_column, resolution_column, count_column = st.columns(
+        [2.2, 1, 1],
+        vertical_alignment="bottom",
+    )
+    comparison_mode = mode_column.radio(
+        "Mod de comparație",
+        options=["Pe lună", "Pe date libere"],
+        horizontal=True,
+        key="comparison_mode",
+    )
+    available_resolutions = sorted(dataframe["Rezolutie"].unique().tolist())
+    selected_resolution = resolution_column.selectbox(
+        "Rezoluție",
+        options=available_resolutions,
+        format_func=format_resolution_label,
+        index=(
+            available_resolutions.index("PT60M")
+            if "PT60M" in available_resolutions
+            else 0
+        ),
+        key="comparison_resolution",
+    )
+    series_count = count_column.selectbox(
+        "Număr de serii",
+        options=[2, 3, 4],
+        key="comparison_series_count",
+    )
+
+    available_years = sorted(dataframe["Data"].dt.year.unique().tolist())
+    maximum_interval = 24 * 60 // minutes_for_resolution(
+        selected_resolution
+    )
+    series_columns = st.columns(series_count, gap="medium")
+    series_settings = []
+
+    for series_index, series_column in enumerate(series_columns):
+        series_column.markdown(f"**Seria {series_index + 1}**")
+        if comparison_mode == "Pe lună":
+            preferred_year = 2025 + series_index
+            default_year = (
+                preferred_year
+                if preferred_year in available_years
+                else available_years[min(series_index, len(available_years) - 1)]
+            )
+            selected_year = series_column.selectbox(
+                "An",
+                options=available_years,
+                index=available_years.index(default_year),
+                key=f"comparison_month_year_{series_index}",
+            )
+            selected_month = series_column.selectbox(
+                "Lună",
+                options=list(range(1, 13)),
+                format_func=lambda month: ROMANIAN_MONTHS[month - 1],
+                key=f"comparison_month_{series_index}",
+            )
+            start_date = date(selected_year, selected_month, 1)
+            end_date = date(
+                selected_year,
+                selected_month,
+                monthrange(selected_year, selected_month)[1],
+            )
+            base_label = f"{ROMANIAN_MONTHS[selected_month - 1]} {selected_year}"
+            alignment = "day_of_month"
+        else:
+            minimum_date = dataframe["Data"].min().date()
+            maximum_date = dataframe["Data"].max().date()
+            default_period = default_comparison_period(
+                dataframe,
+                series_index,
+            )
+            selected_dates = series_column.date_input(
+                "Perioada",
+                value=default_period,
+                min_value=minimum_date,
+                max_value=maximum_date,
+                key=f"comparison_free_dates_{series_index}",
+            )
+            start_date, end_date = normalize_date_range(selected_dates)
+            base_label = (
+                f"{start_date.strftime('%d.%m.%Y')}–"
+                f"{end_date.strftime('%d.%m.%Y')}"
+            )
+            alignment = "period_day"
+
+        interval_state_key = (
+            f"comparison_intervals_{series_index}_{selected_resolution}"
+        )
+        selected_intervals = render_interval_selector(
+            series_column,
+            selected_resolution,
+            interval_state_key,
+        )
+        interval_text = comparison_interval_text(
+            selected_intervals,
+            maximum_interval,
+        )
+        series_settings.append(
+            (
+                start_date,
+                end_date,
+                selected_intervals,
+                alignment,
+                f"{base_label} · {interval_text}",
+            )
+        )
+
+    comparison_series = []
+    used_labels = {}
+    missing_series = []
+    for start_date, end_date, intervals, alignment, base_label in series_settings:
+        if not intervals:
+            missing_series.append(f"{base_label}: niciun interval selectat")
+            continue
+
+        label = unique_series_label(base_label, used_labels)
+        series_data = prepare_comparison_series(
+            dataframe=dataframe,
+            resolution=selected_resolution,
+            start_date=start_date,
+            end_date=end_date,
+            selected_intervals=intervals,
+            alignment=alignment,
+            label=label,
+        )
+        if series_data.empty:
+            missing_series.append(f"{label}: nu există date")
+        else:
+            comparison_series.append(series_data)
+
+    if missing_series:
+        st.warning("Serii neafișate — " + "; ".join(missing_series) + ".")
+    if not comparison_series:
+        st.info("Selectează intervale și perioade care conțin date.")
+        return
+
+    comparison_data = pd.concat(comparison_series, ignore_index=True)
+    x_axis_title = (
+        "Ziua lunii"
+        if comparison_mode == "Pe lună"
+        else "Poziția zilei în perioadă"
+    )
+    chart = px.line(
+        comparison_data,
+        x="Pozitie",
+        y=PRICE_COLUMN,
+        color="Serie",
+        markers=True,
+        hover_data={"Data": "|%d.%m.%Y", "Pozitie": True},
+        labels={
+            "Pozitie": x_axis_title,
+            PRICE_COLUMN: "Preț mediu [lei/MWh]",
+            "Serie": "Serie",
+        },
+    )
+    chart.update_layout(hovermode="x unified", legend_title_text="Serie")
+    if comparison_mode == "Pe lună":
+        chart.update_xaxes(range=[1, 31], dtick=1)
+    else:
+        chart.update_xaxes(rangemode="tozero")
+    st.plotly_chart(
+        chart,
+        use_container_width=True,
+        key="comparison_chart",
+    )
+
+    with st.expander("Vezi datele comparației"):
+        table_data = comparison_data.copy()
+        table_data["Data"] = table_data["Data"].dt.strftime("%Y-%m-%d")
+        st.dataframe(
+            table_data[["Serie", "Pozitie", "Data", PRICE_COLUMN]],
+            use_container_width=True,
+            hide_index=True,
+            column_config={
+                "Pozitie": st.column_config.NumberColumn(
+                    x_axis_title,
+                    format="%d",
+                ),
+                PRICE_COLUMN: st.column_config.NumberColumn(
+                    format="%.2f lei/MWh"
+                ),
+            },
+        )
 
 
 def format_number(value, decimals=2):

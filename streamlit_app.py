@@ -8,6 +8,7 @@ from app.dashboard_ui import (
     render_header,
     render_invalid_rows_warning,
     render_chart_filters,
+    render_comparison_chart,
     render_latest_day_chart,
 )
 from app.data_service import (
@@ -51,6 +52,8 @@ if dataframe.empty:
 render_invalid_rows_warning(dataframe)
 render_latest_day_chart(dataframe)
 st.divider()
+render_comparison_chart(dataframe)
+st.divider()
 filters = render_chart_filters(dataframe)
 
 if not filters.intervals:
@@ -58,21 +61,19 @@ if not filters.intervals:
         "Nu este selectat niciun interval. "
         "Selectează cel puțin unul pentru a afișa graficul."
     )
-    st.stop()
-
-period_data = filter_data(
-    filters.dataframe,
-    filters.start_date,
-    filters.end_date,
-    filters.resolution,
-    filters.intervals,
-)
-if period_data.empty:
-    st.warning("Niciun rând nu corespunde filtrelor selectate.")
-    st.stop()
-
-displayed_data, single_day = prepare_display_data(
-    period_data,
-    filters.minutes_per_interval,
-)
-render_dashboard(displayed_data, single_day, source_name)
+else:
+    period_data = filter_data(
+        filters.dataframe,
+        filters.start_date,
+        filters.end_date,
+        filters.resolution,
+        filters.intervals,
+    )
+    if period_data.empty:
+        st.warning("Niciun rând nu corespunde filtrelor selectate.")
+    else:
+        displayed_data, single_day = prepare_display_data(
+            period_data,
+            filters.minutes_per_interval,
+        )
+        render_dashboard(displayed_data, single_day, source_name)

@@ -130,6 +130,43 @@ def filter_data(
     ]
 
 
+def prepare_comparison_series(
+    dataframe,
+    resolution,
+    start_date,
+    end_date,
+    selected_intervals,
+    alignment,
+    label,
+):
+    """Calculeaza mediile zilnice si aliniaza o serie pentru comparatie."""
+    period_data = filter_data(
+        dataframe,
+        start_date,
+        end_date,
+        resolution,
+        selected_intervals,
+    )
+    daily_data = period_data.groupby("Data", as_index=False)[
+        PRICE_COLUMN
+    ].mean()
+    if daily_data.empty:
+        return daily_data.assign(Pozitie=pd.Series(dtype="int64"), Serie=label)
+
+    if alignment == "day_of_month":
+        daily_data["Pozitie"] = daily_data["Data"].dt.day
+    elif alignment == "period_day":
+        period_start = pd.Timestamp(start_date)
+        daily_data["Pozitie"] = (
+            daily_data["Data"].dt.normalize() - period_start
+        ).dt.days + 1
+    else:
+        raise ValueError(f"Aliniere necunoscuta: {alignment}")
+
+    daily_data["Serie"] = label
+    return daily_data
+
+
 def latest_day_data(dataframe):
     """Intoarce toate randurile pentru cea mai recenta zi disponibila."""
     latest_date = dataframe["Data"].max().date()
