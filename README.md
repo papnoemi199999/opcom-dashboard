@@ -7,8 +7,8 @@ Aplicație Python pentru descărcarea și vizualizarea prețurilor din Piața pe
 - descarcă rapoartele zilnice pentru rezoluții de 15, 30 și 60 de minute;
 - combină toate rapoartele anului într-un singur CSV;
 - filtrează datele după perioadă și rezoluție;
-- afișează prețul mediu zilnic pentru perioade de mai multe zile;
-- afișează prețurile pe intervale pentru o singură zi;
+- afișează toate prețurile pe intervale pentru perioade de maximum 7 zile și
+  mediile zilnice pentru perioade mai lungi;
 - permite exportul datelor filtrate.
 
 ## Instalare

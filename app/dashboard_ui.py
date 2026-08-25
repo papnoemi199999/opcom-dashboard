@@ -253,6 +253,7 @@ def format_number(value, decimals=2):
 
 
 def render_dashboard(displayed_data, single_day, source_name):
+    shows_intervals = "Interval" in displayed_data.columns
     metric_1, metric_2, metric_3, metric_4 = st.columns(4)
     metric_1.metric(
         "Preț mediu",
@@ -267,7 +268,7 @@ def render_dashboard(displayed_data, single_day, source_name):
         f"{format_number(displayed_data[PRICE_COLUMN].max())} lei/MWh",
     )
     metric_4.metric(
-        "Intervale" if single_day else "Zile",
+        "Intervale" if shows_intervals else "Zile",
         format_number(len(displayed_data), decimals=0),
     )
 
@@ -281,8 +282,22 @@ def render_dashboard(displayed_data, single_day, source_name):
             markers=True,
             labels={PRICE_COLUMN: "Preț [lei/MWh]", "Ora": "Ora"},
         )
+    elif shows_intervals:
+        st.subheader("Prețul pe intervale în perioada selectată")
+        chart = px.line(
+            displayed_data,
+            x="Data și ora",
+            y=PRICE_COLUMN,
+            render_mode="webgl",
+            labels={PRICE_COLUMN: "Preț [lei/MWh]"},
+        )
     else:
         st.subheader("Prețul mediu pe zi")
+        st.caption(
+            "Pentru perioade mai lungi de 7 zile, graficul afișează "
+            "mediile zilnice. Selectează maximum 7 zile pentru toate "
+            "intervalele."
+        )
         chart = px.line(
             displayed_data,
             x="Data",
@@ -293,21 +308,23 @@ def render_dashboard(displayed_data, single_day, source_name):
 
     chart.update_layout(hovermode="x unified")
     st.plotly_chart(chart, use_container_width=True)
-    render_data_table(displayed_data, single_day)
+    render_data_table(displayed_data)
     st.caption(
         f"Sursă: {source_name} · "
         f"{len(displayed_data):,} valori afișate"
     )
 
 
-def render_data_table(displayed_data, single_day):
+def render_data_table(displayed_data):
     with st.expander("Vezi datele din grafic"):
         table_data = displayed_data.copy()
         table_data["Data"] = table_data["Data"].dt.strftime("%Y-%m-%d")
-        if single_day:
+        if "Interval" in table_data.columns:
             table_data = table_data[
                 ["Data", "Interval", "Interval orar", PRICE_COLUMN]
             ]
+        else:
+            table_data = table_data[["Data", PRICE_COLUMN]]
         st.dataframe(
             table_data,
             use_container_width=True,

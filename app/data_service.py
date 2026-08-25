@@ -12,6 +12,7 @@ RESOLUTION_MINUTES = {
     "PT30M": 30,
     "PT60M": 60,
 }
+DETAILED_VIEW_MAX_DAYS = 7
 
 
 @st.cache_data(show_spinner=False)
@@ -142,15 +143,23 @@ def interval_start_time(interval, minutes_per_interval):
 
 
 def prepare_display_data(period_data, minutes_per_interval):
-    """Pregateste valorile pentru graficul zilnic sau agregarea pe zile."""
-    single_day = period_data["Data"].dt.date.nunique() == 1
-    if not single_day:
+    """Pastreaza intervalele pe maximum 7 zile, altfel agrega zilnic."""
+    day_count = period_data["Data"].dt.date.nunique()
+    single_day = day_count == 1
+    if day_count > DETAILED_VIEW_MAX_DAYS:
         displayed_data = period_data.groupby("Data", as_index=False)[
             PRICE_COLUMN
         ].mean()
         return displayed_data, single_day
 
     displayed_data = period_data[["Data", "Interval", PRICE_COLUMN]].copy()
+    interval_offsets = pd.to_timedelta(
+        (displayed_data["Interval"] - 1) * minutes_per_interval,
+        unit="m",
+    )
+    displayed_data["Data și ora"] = (
+        displayed_data["Data"].dt.normalize() + interval_offsets
+    )
     displayed_data["Ora"] = displayed_data["Interval"].map(
         lambda interval: interval_start_time(interval, minutes_per_interval)
     )
