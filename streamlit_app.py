@@ -16,7 +16,7 @@ RESOLUTION_MINUTES = {
 
 
 st.set_page_config(
-    page_title="Dashboard OPCOM",
+    page_title="Dashboard prețuri PZU RO",
     page_icon="⚡",
     layout="wide",
 )
@@ -98,7 +98,7 @@ def format_number(value, decimals=2):
     return f"{value:,.{decimals}f}".replace(",", " ")
 
 
-st.title("Dashboard prețuri OPCOM")
+st.title("Dashboard prețuri PZU RO")
 st.caption("Analiză și filtrare pentru rapoartele Pieței pentru Ziua Următoare")
 
 files = local_csv_files()
