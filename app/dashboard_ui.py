@@ -171,6 +171,7 @@ def render_latest_day_chart(dataframe):
         use_container_width=True,
         key="latest_day_chart",
     )
+    render_data_table(displayed_data, download_key="latest_day_download")
 
 
 def set_interval_selection(state_key, intervals):
@@ -634,14 +635,14 @@ def render_dashboard(displayed_data, single_day, source_name):
 
     chart.update_layout(hovermode="x unified")
     st.plotly_chart(chart, use_container_width=True)
-    render_data_table(displayed_data)
+    render_data_table(displayed_data, download_key="filtered_data_download")
     st.caption(
         f"Sursă: {source_name} · "
         f"{len(displayed_data):,} valori afișate"
     )
 
 
-def render_data_table(displayed_data):
+def render_data_table(displayed_data, download_key):
     with st.expander("Vezi datele din grafic"):
         table_data = displayed_data.copy()
         table_data["Data"] = table_data["Data"].dt.strftime("%Y-%m-%d")
@@ -668,4 +669,5 @@ def render_data_table(displayed_data):
             data=csv_data,
             file_name="opcom_filtrat.csv",
             mime="text/csv",
+            key=download_key,
         )
