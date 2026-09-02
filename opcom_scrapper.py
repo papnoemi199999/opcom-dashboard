@@ -209,7 +209,7 @@ def latest_saved_date(filename):
 def download_year(
     year,
     resolutions=(15, 30, 60),
-    delay=0.2,
+    delay=10.0,
     end_date=None,
 ):
     """
