@@ -25,7 +25,18 @@ jobs:
         run: pip install requests
 
       - name: Rulează scraperul pentru anul curent
-        run: python opcom_scrapper.py
+        run: |
+          for attempt in 1 2 3; do
+            if python opcom_scrapper.py; then
+              exit 0
+            fi
+            echo "Incercarea $attempt a esuat."
+            if [ "$attempt" -lt 3 ]; then
+              echo "Astept 60s inainte de reincercare..."
+              sleep 60
+            fi
+          done
+          exit 1
 
       - name: Salvează fișierul actualizat (dacă s-a schimbat)
         run: |

@@ -13,7 +13,14 @@ import requests
 
 BASE_URL = "https://www.opcom.ro/rapoarte-pzu-raportPIP-export-csv"
 HEADERS = {
-    "User-Agent": "Mozilla/5.0",
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/128.0.0.0 Safari/537.36"
+    ),
+    "Accept": "text/csv,application/csv,text/plain,*/*",
+    "Accept-Language": "ro-RO,ro;q=0.9,en-US;q=0.8,en;q=0.7",
+    "Accept-Encoding": "gzip, deflate, br",
+    "Connection": "close",
     "Referer": (
         "https://www.opcom.ro/"
         "grafice-ip-raportPIP-si-volumTranzactionat/ro"
@@ -178,15 +185,41 @@ def parse_opcom_csv(content, requested_resolution, report_date):
     )
 
 
-def download_day(session, report_date, resolution=60):
-    """Descarca si parseaza raportul OPCOM pentru o singura zi."""
+RETRYABLE_STATUS_CODES = {403, 429, 500, 502, 503, 504}
+MAX_ATTEMPTS = 4
+RETRY_BASE_DELAY = 15.0
+
+
+def download_day(report_date, resolution=60):
+    """Descarca si parseaza raportul OPCOM pentru o singura zi.
+
+    Fiecare incercare deschide o conexiune noua (fara sesiune/keep-alive
+    partajata): OPCOM pare sa blocheze cu 403 clientii care refolosesc
+    aceeasi conexiune persistenta dupa cateva cereri.
+    """
     url = f"{BASE_URL}/{report_date:%d/%m/%Y}/ro"
-    response = session.get(
-        url,
-        params={"resolution": resolution},
-        timeout=30,
-    )
-    response.raise_for_status()
+
+    for attempt in range(1, MAX_ATTEMPTS + 1):
+        response = requests.get(
+            url,
+            params={"resolution": resolution},
+            headers=HEADERS,
+            timeout=30,
+        )
+        if (
+            response.status_code in RETRYABLE_STATUS_CODES
+            and attempt < MAX_ATTEMPTS
+        ):
+            wait = RETRY_BASE_DELAY * attempt
+            print(
+                f"[AVERTISMENT] {report_date:%d/%m/%Y} PT{resolution}M: "
+                f"HTTP {response.status_code}, reincercare {attempt}/"
+                f"{MAX_ATTEMPTS - 1} peste {wait:.0f}s"
+            )
+            time.sleep(wait)
+            continue
+        response.raise_for_status()
+        break
 
     # OPCOM trimite un CSV UTF-8; utf-8-sig elimina si un eventual BOM.
     content = response.content.decode("utf-8-sig")
@@ -217,8 +250,8 @@ def download_year(
 
     Daca fisierul exista, sunt descarcate numai zilele de dupa ultima data.
     """
+    today = datetime.now(MARKET_TIMEZONE).date()
     if end_date is None:
-        today = datetime.now(MARKET_TIMEZONE).date()
         end_date = today + timedelta(days=1)
     if year > end_date.year:
         raise ValueError("Nu se pot descarca rapoarte pentru un an viitor.")
@@ -247,54 +280,60 @@ def download_year(
         values = ", ".join(str(value) for value in sorted(invalid_resolutions))
         raise ValueError(f"Rezolutii nesuportate: {values}")
 
-    with requests.Session() as session:
-        session.headers.update(HEADERS)
-        for report_date in iter_dates(start_date, end_date):
-            for resolution in resolutions:
-                if resolution not in available_resolutions(report_date):
+    for report_date in iter_dates(start_date, end_date):
+        for resolution in resolutions:
+            if resolution not in available_resolutions(report_date):
+                unavailable_reports += 1
+                print(
+                    f"[INDISPONIBIL] {report_date:%d/%m/%Y} "
+                    f"PT{resolution}M: PZU a avut granularitate orara"
+                )
+                continue
+
+            try:
+                rows = download_day(report_date, resolution)
+            except (
+                ResolutionMismatchError,
+                requests.RequestException,
+                UnicodeError,
+                ValueError,
+            ) as error:
+                if report_date > today:
+                    # Ziua urmatoare este descarcata "in avans"; OPCOM poate
+                    # sa nu fi publicat inca raportul, ceea ce nu e o eroare.
                     unavailable_reports += 1
                     print(
                         f"[INDISPONIBIL] {report_date:%d/%m/%Y} "
-                        f"PT{resolution}M: PZU a avut granularitate orara"
-                    )
-                    continue
-
-                try:
-                    rows = download_day(session, report_date, resolution)
-                except ResolutionMismatchError as error:
-                    skipped_reports += 1
-                    print(
-                        f"[EROARE] {report_date:%d/%m/%Y} "
-                        f"PT{resolution}M: {error}"
-                    )
-                except (requests.RequestException, UnicodeError, ValueError) as error:
-                    skipped_reports += 1
-                    print(
-                        f"[EROARE] {report_date:%d/%m/%Y} "
-                        f"PT{resolution}M: {error}"
+                        f"PT{resolution}M: raport neaparut inca ({error})"
                     )
                 else:
-                    for row in rows:
-                        new_rows.append(
-                            {
-                                "Data": report_date.isoformat(),
-                                "Interval": row.get("Interval", ""),
-                                "Pret mediu [lei/MWh]": row.get(
-                                    "Pret mediu [lei/MWh]", ""
-                                ),
-                                "Rezolutie": row.get(
-                                    "Rezolutie", f"PT{resolution}M"
-                                ),
-                            }
-                        )
-
-                    downloaded_reports += 1
+                    skipped_reports += 1
                     print(
-                        f"[OK] {report_date:%d/%m/%Y} "
-                        f"PT{resolution}M: {len(rows)} randuri"
+                        f"[EROARE] {report_date:%d/%m/%Y} "
+                        f"PT{resolution}M: {error}"
+                    )
+            else:
+                for row in rows:
+                    new_rows.append(
+                        {
+                            "Data": report_date.isoformat(),
+                            "Interval": row.get("Interval", ""),
+                            "Pret mediu [lei/MWh]": row.get(
+                                "Pret mediu [lei/MWh]", ""
+                            ),
+                            "Rezolutie": row.get(
+                                "Rezolutie", f"PT{resolution}M"
+                            ),
+                        }
                     )
 
-                time.sleep(delay)
+                downloaded_reports += 1
+                print(
+                    f"[OK] {report_date:%d/%m/%Y} "
+                    f"PT{resolution}M: {len(rows)} randuri"
+                )
+
+            time.sleep(delay)
 
     if skipped_reports:
         temporary_filename.unlink(missing_ok=True)
